@@ -209,5 +209,5 @@ def main():
     if alerts:
         body = "<h3>New round‑trip fare(s) under your cap</h3>" + "<hr/>".join(alerts)
         send_email("New round‑trip fare(s) under your cap", body)
-send_email("Test Email from Fare Watch", "<p>This is a test email to verify SMTP setup.</p>")
+# send_email("Test Email from Fare Watch", "<p>This is a test email to verify SMTP setup.</p>")
 

@@ -1,5 +1,5 @@
 # .github/workflows/fare-watch.yml
-name: fare-watch
+name: fare_watch
 
 on:
   schedule:
@@ -25,6 +25,6 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
           ORIGIN: "BER"
-          MAX_PRICE_EUR: "150"      # <- your round-trip cap
+          MAX_PRICE_EUR: "80"      # <- your round-trip cap
           DAYS_AHEAD: "180"
         run: python fare_watch.py

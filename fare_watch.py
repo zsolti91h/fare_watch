@@ -118,9 +118,16 @@ def send_email(subject: str, html_body: str):
     msg["To"] = recipient
 
     context = ssl.create_default_context()
+    try:
     with smtplib.SMTP(host, port, timeout=30) as server:
-        server.ehlo(); server.starttls(context=context); server.login(user, password)
+        server.ehlo()
+        server.starttls(context=context)
+        server.login(user, password)
         server.send_message(msg)
+    print("[INFO] Email sent successfully.")
+except Exception as e:
+    print(f"[ERROR] Failed to send email: {e}")
+
 
 def load_state():
     if STATE_FILE.exists():

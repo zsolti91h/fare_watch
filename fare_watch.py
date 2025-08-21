@@ -23,7 +23,7 @@ from pathlib import Path
 import requests
 from requests.adapters import HTTPAdapter, Retry
 
-AMADEUS_BASE = os.getenv("AMADEUS_BASE", "https://test.api.amadeus.com")
+AMADEUS_BASE = os.getenv("AMADEUS_BASE", "https://api.amadeus.com")
 STATE_FILE = Path("state.json")
 
 # ---------- HTTP Session with retries/backoff ----------

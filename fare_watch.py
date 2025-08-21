@@ -1,140 +1,104 @@
-# file: fare_watch.py
-import os, json, time, smtplib, ssl
-import datetime as dt
-from pathlib import Path
-from email.mime.text import MIMEText
-import requests
+name: fare-watch
 
-AMADEUS_BASE = "https://test.api.amadeus.com"  # use https://test.api.amadeus.com if you want only test data
-STATE_FILE = Path("state.json")
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "15 05 * * *"
+    - cron: "15 16 * * *"
 
-def get_token():
-    r = requests.post(
-        f"{AMADEUS_BASE}/v1/security/oauth2/token",
-        data={
-            "grant_type": "client_credentials",
-            "client_id": os.environ["AMADEUS_CLIENT_ID"],
-            "client_secret": os.environ["AMADEUS_CLIENT_SECRET"],
-        },
-        timeout=15,
-    )
-    r.raise_for_status()
-    return r.json()["access_token"]
+permissions:
+  contents: read
 
-def inspiration(token, origin, max_price_eur, date_range):
-    # oneWay=false → round-trip suggestions (cached/indicative)  ─ Amadeus docs
-    params = {
-        "origin": origin,
-        "oneWay": "false",
-        "maxPrice": str(max_price_eur),
-        "departureDate": date_range,  # e.g., 2025-09-01,2026-03-01
-    }
-    r = requests.get(
-        f"{AMADEUS_BASE}/v1/shopping/flight-destinations",
-        headers={"Authorization": f"Bearer {token}"},
-        params=params, timeout=20
-    )
-    r.raise_for_status()
-    return r.json().get("data", [])
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
-def offers(token, origin, dest, dep_date, ret_date, currency="EUR", max_results=5):
-    # Live round-trip pricing  ─ Amadeus Flight Offers Search
-    params = {
-        "originLocationCode": origin,
-        "destinationLocationCode": dest,
-        "departureDate": dep_date,
-        "returnDate": ret_date,
-        "adults": "1",
-        "currencyCode": currency,
-        "max": str(max_results),
-        # Do NOT set nonStop → allow connections (your requirement)
-    }
-    r = requests.get(
-        f"{AMADEUS_BASE}/v2/shopping/flight-offers",
-        headers={"Authorization": f"Bearer {token}"},
-        params=params, timeout=25
-    )
-    r.raise_for_status()
-    return r.json().get("data", [])
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-def send_email(subject, html_body):
-    host = os.environ["SMTP_HOST"]
-    port = int(os.environ.get("SMTP_PORT", "587"))
-    user = os.environ["SMTP_USER"]
-    password = os.environ["SMTP_PASS"]
-    recipient = os.environ["RECIPIENT_EMAIL"]
+      - name: Show repo layout
+        run: |
+          pwd
+          ls -la
+          echo "---- .github/workflows ----"
+          ls -la .github/workflows || true
 
-    msg = MIMEText(html_body, "html", "utf-8")
-    msg["Subject"] = subject
-    msg["From"] = user
-    msg["To"] = recipient
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    context = ssl.create_default_context()
-    with smtplib.SMTP(host, port, timeout=20) as server:
-        server.ehlo()
-        server.starttls(context=context)
-        server.login(user, password)   # Office 365 needs STARTTLS on 587; Gmail requires App Password with 2FA
-        server.send_message(msg)
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-def load_state():
-    return json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {"alerts": {}}
+      - name: Sanity-check required env vars
+        env:
+          AMADEUS_CLIENT_ID: ${{ secrets.AMADEUS_CLIENT_ID }}
+          AMADEUS_CLIENT_SECRET: ${{ secrets.AMADEUS_CLIENT_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          required = [
+              "AMADEUS_CLIENT_ID", "AMADEUS_CLIENT_SECRET",
+              "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS",
+              "RECIPIENT_EMAIL"
+          ]
+          missing = [k for k in required if not os.getenv(k)]
+          if missing:
+              print("Missing required env vars:", ", ".join(missing))
+              sys.exit(1)
+          print("All required env vars are present.")
+          PY
 
-def save_state(state):
-    STATE_FILE.write_text(json.dumps(state, indent=2))
+      - name: Run price watcher (Amadeus TEST environment)
+        env:
+          # === Amadeus (Self-Service) ===
+          AMADEUS_CLIENT_ID: ${{ secrets.AMADEUS_CLIENT_ID }}
+          AMADEUS_CLIENT_SECRET: ${{ secrets.AMADEUS_CLIENT_SECRET }}
+          # Force TEST base for first runs:
+          AMADEUS_BASE: https://test.api.amadeus.com
 
-def main():
-    origin = os.getenv("ORIGIN", "BER")
-    max_price = int(os.getenv("MAX_PRICE_EUR", "150"))
-    days_ahead = int(os.getenv("DAYS_AHEAD", "180"))
+          # === Gmail SMTP ===
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
 
-    token = get_token()
-    today = dt.date.today()
-    end = today + dt.timedelta(days=days_ahead)
-    date_range = f"{today.isoformat()},{end.isoformat()}"
+          # === Your rules ===
+          ORIGIN: BER
+          MAX_PRICE_EUR: "80"
+          DAYS_AHEAD: "180"
+        run: |
+          python -X dev - <<'PY'
+          import os, sys, traceback
+          # Ensure script is importable / present
+          if not os.path.exists("fare_watch.py"):
+              print("ERROR: 'fare_watch.py' not found in repo root.")
+              sys.exit(1)
+          try:
+              import fare_watch  # import to catch syntax errors early
+          except Exception as e:
+              print("ERROR importing fare_watch.py:\n")
+              traceback.print_exc()
+              sys.exit(1)
+          try:
+              # re-run the actual script as a program so __name__ == "__main__"
+              import runpy
+              runpy.run_path("fare_watch.py", run_name="__main__")
+          except SystemExit as se:
+              raise
+          except Exception:
+              traceback.print_exc()
+              sys.exit(1)
+          PY
 
-    insp = inspiration(token, origin, max_price, date_range)
-    state = load_state()
-    new_alerts = []
-
-    for item in insp:
-        dest = item["destination"]         # e.g., BCN
-        dep = item.get("departureDate")    # present for RT suggestions
-        ret = item.get("returnDate")
-        if not (dep and ret):
-            continue
-
-        # Confirm with live price
-        live = offers(token, origin, dest, dep, ret, currency="EUR", max_results=3)
-        if not live:
-            continue
-        # Amadeus returns grandTotal for full itinerary
-        try:
-            live_total = float(live[0]["price"]["grandTotal"])
-        except Exception:
-            continue
-
-        if live_total <= max_price:
-            key = f"{origin}-{dest}-{dep}-{ret}-{int(live_total)}"
-            last = state["alerts"].get(key, 0)
-            if time.time() - last < 48 * 3600:  # suppress duplicates for 48h
-                continue
-
-            # Build a simple HTML snippet
-            html = f"""
-            <p>✈️ <b>Deal found under your round‑trip cap</b></p>
-            <p><b>{origin}</b> ⇄ <b>{dest}</b><br/>
-               <b>Dates:</b> {dep} → {ret}<br/>
-               <b>Price:</b> {live_total:.0f} €</p>
-            <p>Checked live via Amadeus Flight Offers Search.</p>
-            """
-            new_alerts.append(html)
-            state["alerts"][key] = time.time()
-
-    if new_alerts:
-        body = "<hr/>".join(new_alerts) + "<p>— Your flight price bot</p>"
-        send_email("New round‑trip fare(s) under your cap", body)
-
-    save_state(state)
-
-if __name__ == "__main__":
-    main()

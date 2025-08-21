@@ -1,0 +1,5 @@
+
+cd fare_watch
+git add .github/workflows/fare-watch.yml
+git commit -m "Add GitHub Actions workflow"
+git push origin main

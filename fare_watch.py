@@ -5,7 +5,7 @@ from pathlib import Path
 from email.mime.text import MIMEText
 import requests
 
-AMADEUS_BASE = "https://api.amadeus.com"  # use https://test.api.amadeus.com if you want only test data
+AMADEUS_BASE = "https://test.api.amadeus.com"  # use https://test.api.amadeus.com if you want only test data
 STATE_FILE = Path("state.json")
 
 def get_token():

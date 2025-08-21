@@ -1,0 +1,30 @@
+# .github/workflows/fare-watch.yml
+name: fare-watch
+
+on:
+  schedule:
+    - cron: "15 05 * * *"   # 07:15 Berlin (approx; Actions uses UTC)
+    - cron: "15 16 * * *"   # 18:15 Berlin (approx)
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install requests
+      - name: Run price watcher
+        env:
+          AMADEUS_CLIENT_ID: ${{ secrets.AMADEUS_CLIENT_ID }}
+          AMADEUS_CLIENT_SECRET: ${{ secrets.AMADEUS_CLIENT_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          ORIGIN: "BER"
+          MAX_PRICE_EUR: "150"      # <- your round-trip cap
+          DAYS_AHEAD: "180"
+        run: python fare_watch.py

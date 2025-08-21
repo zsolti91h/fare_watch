@@ -204,6 +204,7 @@ def main():
             state["alerts"][key] = time.time()
 
         time.sleep(sleep_ms/1000.0)  # be polite between requests
+print(f"[INFO] Alerts to send: {len(alerts)}")
 
     if alerts:
         body = "<h3>New round‑trip fare(s) under your cap</h3>" + "<hr/>".join(alerts)

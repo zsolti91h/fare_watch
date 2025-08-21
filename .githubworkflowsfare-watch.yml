@@ -49,7 +49,7 @@ jobs:
 
           # === Rules ===
           ORIGIN: BER
-          MAX_PRICE_EUR: "80"
+          MAX_PRICE_EUR: "400"
           DAYS_AHEAD: "180"
         run: |
           python fare_watch.py

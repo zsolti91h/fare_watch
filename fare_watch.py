@@ -128,57 +128,63 @@ def main():
 
     print(f"[INFO] Searching one-way from {origin} for ≤ {max_price}€ within {date_range}")
     insp = inspiration(token, origin, max_price, date_range)
-    print(f"[INFO] Inspiration candidates: {len(insp)} (checking first {max_candidates})")
+    print(f"[INFO] Inspiration candidates: {len(insp)}")
+
+    # Sort inspiration candidates by price
+    insp_sorted = sorted(
+        [it for it in insp if "price" in it and "total" in it["price"]],
+        key=lambda x: float(x["price"]["total"])
+    )
 
     state = load_state()
     alerts = []
 
-    for it in insp[:max_candidates]:
+    for it in insp_sorted[:max_candidates]:
         dest = it.get("destination")
         dep = it.get("departureDate")
         if not (dest and dep):
             print(f"[SKIP] Missing destination or departure date in candidate: {it}")
             continue
-    
+
         try:
             live = offers(token, origin, dest, dep, currency="EUR", max_results=3)
         except requests.exceptions.RequestException as e:
             print(f"[SKIP] Offers failed for {origin}-{dest} on {dep}: {e}")
             continue
-    
+
         if not live:
             print(f"[SKIP] No live offers returned for {origin}-{dest} on {dep}")
             time.sleep(sleep_ms / 1000.0)
             continue
-    
+
         try:
             live_total = float(live[0]["price"]["grandTotal"])
         except Exception as e:
             print(f"[SKIP] Failed to parse price for {origin}-{dest} on {dep}: {e}")
             time.sleep(sleep_ms / 1000.0)
             continue
-    
         if live_total <= max_price:
             key = f"{origin}-{dest}-{dep}-{int(live_total)}"
             last = state["alerts"].get(key, 0)
             if time.time() - last < 48 * 3600:
                 print(f"[SKIP] Duplicate alert for {key} (sent recently)")
                 continue
-    
+
             html = (
                 f"<p>✈️ <b>{origin}</b> → <b>{dest}</b><br>"
                 f"<b>Date:</b> {dep}<br>"
                 f"<b>Price:</b> {live_total:.0f} €</p>"
             )
-            alerts.append(html)
+            alerts.append((live_total, html))
             state["alerts"][key] = time.time()
-    
+
         time.sleep(sleep_ms / 1000.0)
 
-
-    if alerts:
-        body = "<h3>New one-way fare(s) under your cap</h3>" + "<hr/>".join(alerts)
-        send_email("New one-way fare(s) under your cap", body)
+    # Sort alerts by price and keep only the 5 cheapest
+    alerts_sorted = sorted(alerts, key=lambda x: x[0])[:5]
+    if alerts_sorted:
+        body = "<h3>Top 5 one-way fare(s) under your cap</h3>" + "<hr/>".join([html for _, html in alerts_sorted])
+        send_email("Top 5 one-way fare(s) under your cap", body)
         save_state(state)
 
 main()

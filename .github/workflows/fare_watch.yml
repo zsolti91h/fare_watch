@@ -45,7 +45,7 @@ jobs:
 
           # === Your rules ===
           ORIGIN: BER
-          MAX_PRICE_EUR: "400"    # round-trip price cap
+          MAX_PRICE_EUR: "60"    # one-way price cap
           DAYS_AHEAD: "180"      # ~next 6 months
         run: |
           python fare_watch.py

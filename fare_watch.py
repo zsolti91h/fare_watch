@@ -117,7 +117,7 @@ def main():
     origin = os.getenv("ORIGIN", "BER")
     max_price = int(os.getenv("MAX_PRICE_EUR", "80"))
     days_ahead = int(os.getenv("DAYS_AHEAD", "180"))
-    max_candidates = int(os.getenv("MAX_CANDIDATES", "8"))
+    max_candidates = int(os.getenv("MAX_CANDIDATES", "100"))
     sleep_ms = int(os.getenv("SLEEP_BETWEEN_MS", "300"))
 
     token = get_token()
@@ -134,41 +134,47 @@ def main():
     alerts = []
 
     for it in insp[:max_candidates]:
-        dest = it.get("destination")
-        dep = it.get("departureDate")
-        if not (dest and dep):
-            continue
-        try:
-            live = offers(token, origin, dest, dep, currency="EUR", max_results=3)
-        except requests.exceptions.RequestException as e:
-            print(f"[WARN] Offers failed for {origin}-{dest} on {dep}: {e}")
-            continue
+    dest = it.get("destination")
+    dep = it.get("departureDate")
+    if not (dest and dep):
+        print(f"[SKIP] Missing destination or departure date in candidate: {it}")
+        continue
 
-        if not live:
-            time.sleep(sleep_ms / 1000.0)
-            continue
+    try:
+        live = offers(token, origin, dest, dep, currency="EUR", max_results=3)
+    except requests.exceptions.RequestException as e:
+        print(f"[SKIP] Offers failed for {origin}-{dest} on {dep}: {e}")
+        continue
 
-        try:
-            live_total = float(live[0]["price"]["grandTotal"])
-        except Exception:
-            time.sleep(sleep_ms / 1000.0)
-            continue
-
-        if live_total <= max_price:
-            key = f"{origin}-{dest}-{dep}-{int(live_total)}"
-            last = state["alerts"].get(key, 0)
-            if time.time() - last < 48 * 3600:
-                continue
-
-            html = (
-                f"<p>✈️ <b>{origin}</b> → <b>{dest}</b><br>"
-                f"<b>Date:</b> {dep}<br>"
-                f"<b>Price:</b> {live_total:.0f} €</p>"
-            )
-            alerts.append(html)
-            state["alerts"][key] = time.time()
-
+    if not live:
+        print(f"[SKIP] No live offers returned for {origin}-{dest} on {dep}")
         time.sleep(sleep_ms / 1000.0)
+        continue
+
+    try:
+        live_total = float(live[0]["price"]["grandTotal"])
+    except Exception as e:
+        print(f"[SKIP] Failed to parse price for {origin}-{dest} on {dep}: {e}")
+        time.sleep(sleep_ms / 1000.0)
+        continue
+
+    if live_total <= max_price:
+        key = f"{origin}-{dest}-{dep}-{int(live_total)}"
+        last = state["alerts"].get(key, 0)
+        if time.time() - last < 48 * 3600:
+            print(f"[SKIP] Duplicate alert for {key} (sent recently)")
+            continue
+
+        html = (
+            f"<p>✈️ <b>{origin}</b> → <b>{dest}</b><br>"
+            f"<b>Date:</b> {dep}<br>"
+            f"<b>Price:</b> {live_total:.0f} €</p>"
+        )
+        alerts.append(html)
+        state["alerts"][key] = time.time()
+
+    time.sleep(sleep_ms / 1000.0)
+
 
     if alerts:
         body = "<h3>New one-way fare(s) under your cap</h3>" + "<hr/>".join(alerts)

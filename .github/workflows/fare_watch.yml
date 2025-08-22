@@ -4,7 +4,7 @@ on:
   # ⏱️ Scheduled runs (times are in UTC)
   schedule:
     - cron: "15 05 * * *"   # ~07:15 Berlin time
-    - cron: "15 16 * * *"   # ~18:15 Berlin time
+  #  - cron: "15 16 * * *"   # ~18:15 Berlin time
   # ▶️ Manual run button in the Actions tab
   workflow_dispatch: {}
 
